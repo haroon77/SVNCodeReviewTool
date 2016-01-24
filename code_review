@@ -1,0 +1,77 @@
+#!/usr/bin/env python
+__author__ = "Haroon Rashedu Sylavudeen"
+__copyright__ = "Copyright (C) 2016 Haroon Rashedu Sylavudeen"
+__license__ = "Public Domain"
+__version__ = "1.0"
+
+import os
+import re
+import sys
+import difflib
+from pydiff import HtmlDiff as HDiff
+import argparse
+import subprocess
+from errno import *
+
+def main():
+    parser = argparse.ArgumentParser(description="SVN Code Review Tool")
+    parser.add_argument('-b', dest='svn_branch_name', type=str, required=False)
+    args = parser.parse_args()
+    svn_url = args.svn_branch_name
+    if svn_url is None:
+        svn_url = "."
+    get_svn_info(svn_url) 
+
+
+def get_svn_info(svn_branch_url):
+    cmd = ("svn info " + svn_branch_url).split()
+    svn_info = subprocess.Popen(cmd, stdin=subprocess.PIPE,  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out, err = svn_info.communicate()
+    if err:
+        print "Wrong SVN Path" 
+        print err
+        sys.exit(EINTR)
+    svn_url =  (out.split("URL:")[1]).split()[0]
+
+    rev_hist_cmd = ("svn log -q " + svn_url ).split()
+    svn_log = subprocess.Popen(rev_hist_cmd, stdin=subprocess.PIPE,  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out, err = svn_log.communicate()
+    if err:
+        print "Error while processing: ", err
+        sys.exit(EINTR)
+    out = out.split("\n")
+    rev_hist = [re.sub("[r]+", "", (out[1]).split()[0]), re.sub("[r]+", "", (out[3]).split()[0])]
+    print "Comparing Revisions", rev_hist[0],":",rev_hist[1]
+
+    list_files_cmd = ("svn diff -r " + rev_hist[0]+ ":" + rev_hist[1] + " --summarize " + svn_url).split()
+    svn_diff = subprocess.Popen(list_files_cmd, stdin=subprocess.PIPE,  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out, err = svn_diff.communicate()
+    if err:
+        print "Error while processing: ", err
+        sys.exit(EINTR)
+    diff_files = [y.split()[1] for y in filter((lambda x: len(x) != 0), [m_file for m_file in out.split("\n")])]
+
+    for line in diff_files:
+        _, s_file = os.path.split(line)
+        s_file, _ = os.path.splitext(s_file)
+        s_file += ".html"
+        print "Generating Code Review File =>", s_file
+        with open(s_file, "w") as review_file:
+            f_data = []
+            for i, rev in enumerate(rev_hist):
+                svn_cat_cmd = (" svn " + " cat " + line + "@" + rev).split()
+                svn_cat = subprocess.Popen(svn_cat_cmd, stdin=subprocess.PIPE,  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                out, err = svn_cat.communicate()
+                if err:
+                    if "path not found" in err:
+                        print "This file is a new addition: ", line
+                    else:
+                        print "Error while processing"
+                        sys.exit(EINTR)
+                f_data.append(out.split("\n"))
+
+            diff = HDiff().make_file(f_data[1], f_data[0])
+            review_file.writelines(diff)
+     
+if __name__ == '__main__':
+    main()
