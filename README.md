@@ -2,7 +2,7 @@
 ## Side-By-Side Code review with sync scroll
 
 Usage <br>
-      <i> ./code_review  svn_repo_url <i>
+      <i> ./code_review   "svn_repo_url" </i>
 
 This tool will generate html file with the same names as source code file. For example if your source is  “DBConnectionManager.py” then the tool will generate side-by-side code review HTML file with the name “DBConnectionManager.html”.
 
